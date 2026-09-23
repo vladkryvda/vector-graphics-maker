@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PRECISION CAD // SINGLE-STROKE SKELETON</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg: #060708;
+      --border: rgba(255, 255, 255, 0.12);
+      --border-subtle: rgba(255, 255, 255, 0.04);
+      --text: #e6e9ee;
+      --dim: #545b67;
+      --accent: #ffffff;
+      --mono: 'JetBrains Mono', ui-monospace, monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: -0.01em;
+      user-select: none;
+    }
+
+    .viewport {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-image: 
+        linear-gradient(var(--border-subtle) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border-subtle) 1px, transparent 1px),
+        linear-gradient(rgba(255,255,255,0.07) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.07) 1px, transparent 1px);
+      background-size: 10px 10px, 10px 10px, 50px 50px, 50px 50px;
+      cursor: crosshair;
+    }
+
+    .corner-mark {
+      position: absolute;
+      color: var(--dim);
+      font-size: 15px;
+      line-height: 1;
+      pointer-events: none;
+    }
+    .tl { top: 20px; left: 20px; }
+    .tr { top: 20px; right: 20px; }
+    .bl { bottom: 20px; left: 20px; }
+    .br { bottom: 20px; right: 20px; }
+
+    .hud-top {
+      position: absolute;
+      top: 20px;
+      left: 50px;
+      right: 50px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+      color: var(--dim);
+      font-size: 10px;
+      z-index: 20;
+    }
+    .hud-top .bold { color: var(--text); font-weight: 600; }
+
+    .top-actions {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+    }
+    .text-btn {
+      background: transparent;
+      border: none;
+      color: var(--dim);
+      font-family: var(--mono);
+      font-size: 10px;
+      cursor: pointer;
+      transition: color 0.15s;
+    }
+    .text-btn:hover { color: #ff5555; }
+
+    #svg-stage {
+      width: 82vw;
+      height: 74vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+    }
+
+    #svg-stage svg {
+      max-width: 100%;
+      max-height: 100%;
+      stroke: var(--accent);
+      fill: none;
+      shape-rendering: geometricPrecision;
+    }
+
+    .hud-bottom {
+      position: absolute;
+      bottom: 26px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(10, 12, 14, 0.94);
+      border: 1px solid var(--border);
+      backdrop-filter: blur(12px);
+      display: flex;
+      align-items: center;
+      padding: 12px 24px;
+      gap: 22px;
+      z-index: 10;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.7);
+    }
+
+    .ctrl-item {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      min-width: 110px;
+    }
+    .ctrl-item .label-row {
+      display: flex;
+      justify-content: space-between;
+      color: var(--dim);
+      font-size: 9px;
+    }
+    .ctrl-item .label-row span:last-child { color: var(--text); font-weight: 500; }
+
+    input[type="range"] {
+      appearance: none;
+      width: 100%;
+      height: 1px;
+      background: var(--border);
+      outline: none;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      appearance: none;
+      width: 8px;
+      height: 8px;
+      background: var(--text);
+      cursor: pointer;
+    }
+
+    /* Перемикач режимів: Скелет (одинарна лінія) чи Контур */
+    .mode-toggle {
+      display: flex;
+      border: 1px solid var(--border);
+    }
+    .mode-btn {
+      background: transparent;
+      border: none;
+      color: var(--dim);
+      font-family: var(--mono);
+      font-size: 9px;
+      padding: 6px 10px;
+      cursor: pointer;
+      text-transform: uppercase;
+      transition: all 0.15s;
+    }
+    .mode-btn.active {
+      background: var(--text);
+      color: var(--bg);
+      font-weight: 600;
+    }
+
+    .btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 10px;
+      padding: 8px 14px;
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      transition: all 0.15s;
+    }
+    .btn:hover {
+      background: var(--text);
+      color: var(--bg);
+    }
+
+    .drag-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(6, 7, 8, 0.88);
+      border: 2px dashed var(--accent);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      font-size: 12px;
+      letter-spacing: 0.15em;
+      pointer-events: none;
+    }
+    body.dragging .drag-overlay { display: flex; }
+
+    .watermark {
+      position: absolute;
+      color: rgba(255, 255, 255, 0.1);
+      font-size: 13px;
+      letter-spacing: 0.18em;
+      pointer-events: none;
+      text-align: center;
+      line-height: 2;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="drag-overlay">
+    <span>[ RELEASE TO EXTRACT SINGLE-STROKE CAD MODEL ]</span>
+  </div>
+
+  <div class="viewport" id="viewport">
+    <span class="corner-mark tl">+</span>
+    <span class="corner-mark tr">+</span>
+    <span class="corner-mark bl">+</span>
+    <span class="corner-mark br">+</span>
+
+    <div class="hud-top">
+      <div><span class="bold">CAD // CENTERLINE OPTIMIZED</span></div>
+      <div id="stat-info">STATUS: IDLE // BYTES: 0 KB</div>
+      <div class="top-actions">
+        <span id="coords">X: 0.00 | Y: 0.00</span>
+        <button class="text-btn" id="btn-clear">[ CLEAR STORAGE ]</button>
+      </div>
+    </div>
+
+    <div class="watermark" id="watermark">
+      DROP IMAGE ANYWHERE ON BOARD<br>
+      <span style="font-size: 9px; opacity: 0.7;">[ АБО КЛІКНІТЬ ДЛЯ ВИБОРУ ФАЙЛУ ]</span>
+    </div>
+
+    <div id="svg-stage"></div>
+
+    <div class="hud-bottom" onclick="event.stopPropagation()">
+      <!-- Режим обробки -->
+      <div class="mode-toggle">
+        <button class="mode-btn active" id="mode-single" title="Стискає штрих в одну центральну лінію">1-LINE SKELETON</button>
+        <button class="mode-btn" id="mode-edges" title="Обводить межі (для фото)">EDGES</button>
+      </div>
+
+      <div class="ctrl-item">
+        <div class="label-row">
+          <span>КОНТРАСТ ШТРИХА</span>
+          <span id="v-thresh">120</span>
+        </div>
+        <input type="range" id="threshold" min="30" max="220" value="120">
+      </div>
+
+      <div class="ctrl-item">
+        <div class="label-row">
+          <span>СПРОЩЕННЯ (ОПТИМІЗАЦІЯ)</span>
+          <span id="v-prec">1.6</span>
+        </div>
+        <input type="range" id="precision" min="0.5" max="4.0" step="0.1" value="1.6">
+      </div>
+
+      <div class="ctrl-item" style="min-width: 90px;">
+        <div class="label-row">
+          <span>ТОВЩИНА ПЕРА</span>
+          <span id="v-stroke">0.45px</span>
+        </div>
+        <input type="range" id="stroke" min="0.10" max="1.50" step="0.05" value="0.45">
+      </div>
+
+      <button class="btn" id="copy-btn">COPY COMPACT SVG</button>
+      <button class="btn" id="dl-btn">SAVE .SVG</button>
+    </div>
+  </div>
+
+  <input type="file" id="hidden-file" accept="image/*" style="display:none">
+
+  <script>
+    const viewport = document.getElementById('viewport');
+    const stage = document.getElementById('svg-stage');
+    const coords = document.getElementById('coords');
+    const statInfo = document.getElementById('stat-info');
+    const watermark = document.getElementById('watermark');
+    const fileInput = document.getElementById('hidden-file');
+
+    const threshSlider = document.getElementById('threshold');
+    const precSlider = document.getElementById('precision');
+    const strokeSlider = document.getElementById('stroke');
+
+    const modeSingle = document.getElementById('mode-single');
+    const modeEdges = document.getElementById('mode-edges');
+
+    let currentImg = null;
+    let rawSvgString = "";
+    let useSkeleton = true; // За замовчуванням 1 лінія по центру
+
+    modeSingle.onclick = () => {
+      useSkeleton = true;
+      modeSingle.classList.add('active');
+      modeEdges.classList.remove('active');
+      saveSettings();
+      if (currentImg) processImage();
+    };
+
+    modeEdges.onclick = () => {
+      useSkeleton = false;
+      modeEdges.classList.add('active');
+      modeSingle.classList.remove('active');
+      saveSettings();
+      if (currentImg) processImage();
+    };
+
+    window.addEventListener('mousemove', (e) => {
+      coords.innerText = `X: ${e.clientX.toFixed(0)} | Y: ${e.clientY.toFixed(0)}`;
+    });
+
+    viewport.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files[0]) loadFile(e.target.files[0]);
+    });
+
+    window.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      document.body.classList.add('dragging');
+    });
+
+    window.addEventListener('dragleave', (e) => {
+      if (e.clientX <= 0 || e.clientY <= 0) document.body.classList.remove('dragging');
+    });
+
+    window.addEventListener('drop', (e) => {
+      e.preventDefault();
+      document.body.classList.remove('dragging');
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+        loadFile(e.dataTransfer.files[0]);
+      }
+    });
+
+    [threshSlider, precSlider, strokeSlider].forEach(slider => {
+      slider.oninput = () => {
+        updateLabels();
+        saveSettings();
+        if (currentImg) processImage();
+      };
+    });
+
+    function updateLabels() {
+      document.getElementById('v-thresh').innerText = threshSlider.value;
+      document.getElementById('v-prec').innerText = precSlider.value;
+      document.getElementById('v-stroke').innerText = parseFloat(strokeSlider.value).toFixed(2) + 'px';
+    }
+
+    function loadFile(file) {
+      if (!file.type.startsWith('image/')) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target.result;
+        try { localStorage.setItem('cad_cached_image', dataUrl); } catch (e) {}
+        initImage(dataUrl);
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function initImage(src) {
+      const img = new Image();
+      img.onload = () => {
+        currentImg = img;
+        watermark.style.display = 'none';
+        processImage();
+      };
+      img.src = src;
+    }
+
+    // ==========================================
+    // ЗБЕРЕЖЕННЯ / ВІДНОВЛЕННЯ LOCALSTORAGE
+    // ==========================================
+    function saveSettings() {
+      const s = {
+        thresh: threshSlider.value,
+        prec: precSlider.value,
+        stroke: strokeSlider.value,
+        skeleton: useSkeleton
+      };
+      localStorage.setItem('cad_settings', JSON.stringify(s));
+    }
+
+    function restoreStorage() {
+      const s = localStorage.getItem('cad_settings');
+      if (s) {
+        try {
+          const parsed = JSON.parse(s);
+          threshSlider.value = parsed.thresh;
+          precSlider.value = parsed.prec;
+          strokeSlider.value = parsed.stroke;
+          useSkeleton = parsed.skeleton !== undefined ? parsed.skeleton : true;
+          if (useSkeleton) {
+            modeSingle.classList.add('active');
+            modeEdges.classList.remove('active');
+          } else {
+            modeEdges.classList.add('active');
+            modeSingle.classList.remove('active');
+          }
+          updateLabels();
+        } catch (e) {}
+      }
+
+      const savedSvg = localStorage.getItem('cad_vector_svg');
+      if (savedSvg) {
+        stage.innerHTML = savedSvg;
+        rawSvgString = savedSvg;
+        watermark.style.display = 'none';
+        const bytes = (new Blob([savedSvg]).size / 1024).toFixed(1);
+        statInfo.innerText = `RESTORED // SIZE: ${bytes} KB`;
+      }
+
+      const savedImg = localStorage.getItem('cad_cached_image');
+      if (savedImg) {
+        const img = new Image();
+        img.onload = () => { currentImg = img; };
+        img.src = savedImg;
+      }
+    }
+
+    document.getElementById('btn-clear').onclick = () => {
+      localStorage.clear();
+      stage.innerHTML = '';
+      rawSvgString = '';
+      currentImg = null;
+      watermark.style.display = 'block';
+      statInfo.innerText = 'STATUS: CLEARED';
+    };
+
+    // =======================================================
+    // АЛГОРИТМ ЧЖАНА-СУЕНЯ (ZHANG-SUEN SKELETONIZATION)
+    // Звужує товсті штрихи до ОДНІЄЇ волосяної лінії по центру
+    // =======================================================
+    function zhangSuenThinning(binary, w, h) {
+      let changed = true;
+      let iter = 0;
+      const maxIter = 40;
+
+      while (changed && iter < maxIter) {
+        changed = false;
+        iter++;
+
+        // Підкрок 1
+        const toRemove1 = [];
+        for (let y = 1; y < h - 1; y++) {
+          for (let x = 1; x < w - 1; x++) {
+            const idx = y * w + x;
+            if (binary[idx] !== 1) continue;
+
+            // 8 сусідів за годинниковою стрілкою
+            const p2 = binary[(y - 1) * w + x];
+            const p3 = binary[(y - 1) * w + (x + 1)];
+            const p4 = binary[y * w + (x + 1)];
+            const p5 = binary[(y + 1) * w + (x + 1)];
+            const p6 = binary[(y + 1) * w + x];
+            const p7 = binary[(y + 1) * w + (x - 1)];
+            const p8 = binary[y * w + (x - 1)];
+            const p9 = binary[(y - 1) * w + (x - 1)];
+
+            const b = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9;
+            if (b >= 2 && b <= 6) {
+              const seq = [p2, p3, p4, p5, p6, p7, p8, p9, p2];
+              let a = 0;
+              for (let i = 0; i < 8; i++) {
+                if (seq[i] === 0 && seq[i + 1] === 1) a++;
+              }
+              if (a === 1 && (p2 * p4 * p6 === 0) && (p4 * p6 * p8 === 0)) {
+                toRemove1.push(idx);
+              }
+            }
+          }
+        }
+        for (let i = 0; i < toRemove1.length; i++) {
+          binary[toRemove1[i]] = 0;
+          changed = true;
+        }
+
+        // Підкрок 2
+        const toRemove2 = [];
+        for (let y = 1; y < h - 1; y++) {
+          for (let x = 1; x < w - 1; x++) {
+            const idx = y * w + x;
+            if (binary[idx] !== 1) continue;
+
+            const p2 = binary[(y - 1) * w + x];
+            const p3 = binary[(y - 1) * w + (x + 1)];
+            const p4 = binary[y * w + (x + 1)];
+            const p5 = binary[(y + 1) * w + (x + 1)];
+            const p6 = binary[(y + 1) * w + x];
+            const p7 = binary[(y + 1) * w + (x - 1)];
+            const p8 = binary[y * w + (x - 1)];
+            const p9 = binary[(y - 1) * w + (x - 1)];
+
+            const b = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9;
+            if (b >= 2 && b <= 6) {
+              const seq = [p2, p3, p4, p5, p6, p7, p8, p9, p2];
+              let a = 0;
+              for (let i = 0; i < 8; i++) {
+                if (seq[i] === 0 && seq[i + 1] === 1) a++;
+              }
+              if (a === 1 && (p2 * p4 * p8 === 0) && (p2 * p6 * p8 === 0)) {
+                toRemove2.push(idx);
+              }
+            }
+          }
+        }
+        for (let i = 0; i < toRemove2.length; i++) {
+          binary[toRemove2[i]] = 0;
+          changed = true;
+        }
+      }
+    }
+
+    // ==========================================
+    // СПРОЩЕННЯ ДУГЛАСА-ПЕКЕРА
+    // ==========================================
+    function simplifyRDP(pts, epsilon) {
+      if (pts.length <= 2) return pts;
+      let maxDist = 0, index = 0;
+      const p1 = pts[0], p2 = pts[pts.length - 1];
+
+      for (let i = 1; i < pts.length - 1; i++) {
+        const dx = p2[0] - p1[0], dy = p2[1] - p1[1];
+        const dist = (dx === 0 && dy === 0)
+          ? Math.hypot(pts[i][0] - p1[0], pts[i][1] - p1[1])
+          : Math.abs(dy * pts[i][0] - dx * pts[i][1] + p2[0] * p1[1] - p2[1] * p1[0]) / Math.hypot(dx, dy);
+
+        if (dist > maxDist) { maxDist = dist; index = i; }
+      }
+
+      if (maxDist > epsilon) {
+        const left = simplifyRDP(pts.slice(0, index + 1), epsilon);
+        const right = simplifyRDP(pts.slice(index), epsilon);
+        return left.slice(0, -1).concat(right);
+      }
+      return [p1, p2];
+    }
+
+    // Форматування чисел без зайвих нулів (економить пам'ять)
+    function fmt(n) {
+      return (Math.round(n * 10) / 10).toString();
+    }
+
+    // ==========================================
+    // ГОЛОВНИЙ ПАЙПЛАЙН ОБРОБКИ
+    // ==========================================
+    function processImage() {
+      const maxDim = 550;
+      let w = currentImg.width, h = currentImg.height;
+      if (w > maxDim || h > maxDim) {
+        if (w > h) { h = Math.round(h * (maxDim / w)); w = maxDim; }
+        else { w = Math.round(w * (maxDim / h)); h = maxDim; }
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(currentImg, 0, 0, w, h);
+
+      const src = ctx.getImageData(0, 0, w, h).data;
+      const thresh = parseFloat(threshSlider.value);
+      const deadzone = 4; // Ігноруємо краї файлу скріншота
+
+      const binary = new Uint8Array(w * h);
+
+      // Визначаємо полярність (світлий фон чи темний)
+      let lightBgCount = 0;
+      for (let i = 0; i < src.length; i += 40) {
+        const lum = 0.299 * src[i] + 0.587 * src[i+1] + 0.114 * src[i+2];
+        if (lum > 128) lightBgCount++;
+      }
+      const isLightBg = lightBgCount > (src.length / 80);
+
+      // Бінаризація: 1 = лінія, 0 = фон
+      for (let y = deadzone; y < h - deadzone; y++) {
+        for (let x = deadzone; x < w - deadzone; x++) {
+          const idx = y * w + x;
+          const px = idx * 4;
+          const lum = 0.299 * src[px] + 0.587 * src[px+1] + 0.114 * src[px+2];
+          
+          if (isLightBg) {
+            // Чорний малюнок на світлому папері
+            if (lum < thresh) binary[idx] = 1;
+          } else {
+            // Світла лінія на темному фоні
+            if (lum > thresh) binary[idx] = 1;
+          }
+        }
+      }
+
+      // Якщо увімкнено режим 1 лінії — робимо скелетизацію штрихів
+      if (useSkeleton) {
+        zhangSuenThinning(binary, w, h);
+      }
+
+      // Трасування ланцюгів пікселів
+      const visited = new Uint8Array(w * h);
+      const polylines = [];
+      const epsilon = parseFloat(precSlider.value);
+
+      for (let y = deadzone; y < h - deadzone; y++) {
+        for (let x = deadzone; x < w - deadzone; x++) {
+          const idx = y * w + x;
+          if (binary[idx] === 1 && !visited[idx]) {
+            const line = [];
+            let cx = x, cy = y;
+
+            while (cx >= deadzone && cx < w - deadzone && cy >= deadzone && cy < h - deadzone) {
+              const cIdx = cy * w + cx;
+              if (visited[cIdx] || binary[cIdx] === 0) break;
+              visited[cIdx] = 1;
+              line.push([cx, cy]);
+
+              let found = false;
+              for (let dy = -1; dy <= 1; dy++) {
+                for (let dx = -1; dx <= 1; dx++) {
+                  if (dx === 0 && dy === 0) continue;
+                  const nIdx = (cy + dy) * w + (cx + dx);
+                  if (binary[nIdx] === 1 && !visited[nIdx]) {
+                    cx += dx; cy += dy;
+                    found = true;
+                    break;
+                  }
+                }
+                if (found) break;
+              }
+              if (!found) break;
+            }
+
+            // Відсікаємо цятки менші за 5 точок
+            if (line.length >= 6) {
+              const simplified = simplifyRDP(line, epsilon);
+              if (simplified.length >= 2) polylines.push(simplified);
+            }
+          }
+        }
+      }
+
+      // ===================================================
+      // ГЕНЕРАЦІЯ НАДКОМПАКТНОГО SVG (ВСЕ В ОДНОМУ ТЕГУ PATH)
+      // ===================================================
+      const strokeW = parseFloat(strokeSlider.value);
+      let pathData = "";
+
+      polylines.forEach(pts => {
+        pathData += `M${fmt(pts[0][0])},${fmt(pts[0][1])}`;
+        for (let i = 1; i < pts.length; i++) {
+          pathData += `L${fmt(pts[i][0])},${fmt(pts[i][1])}`;
+        }
+      });
+
+      const svg = `<svg viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">\n` +
+        `  <path d="${pathData}" fill="none" stroke="currentColor" stroke-width="${strokeW}" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>\n` +
+        `</svg>`;
+
+      stage.innerHTML = svg;
+      rawSvgString = svg;
+
+      try { localStorage.setItem('cad_vector_svg', svg); } catch (e) {}
+
+      const bytes = (new Blob([svg]).size / 1024).toFixed(1);
+      const modeName = useSkeleton ? "1-LINE SKELETON" : "EDGES";
+      statInfo.innerText = `${modeName} // PATHS: ${polylines.length} // SIZE: ${bytes} KB`;
+    }
+
+    document.getElementById('copy-btn').onclick = () => {
+      if (!rawSvgString) return;
+      navigator.clipboard.writeText(rawSvgString);
+      statInfo.innerText = "COPIED // 100% COMPACT";
+      setTimeout(() => { if (currentImg) processImage(); }, 1200);
+    };
+
+    document.getElementById('dl-btn').onclick = () => {
+      if (!rawSvgString) return;
+      const blob = new Blob([rawSvgString], { type: 'image/svg+xml' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `cad_single_stroke_${Date.now()}.svg`;
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+
+    restoreStorage();
+  </script>
+</body>
+</html>
